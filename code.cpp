@@ -19,23 +19,26 @@ struct priority_queue {
     int weight;
 };
 
-int N = 6;
+int N = 9;
 int t = 6;
 
 bool working[6];    // Change size to t
 
 // int **E, **outputE;
-int E[6][6] = { { -1, 2, -1, 6, -1 ,2},
-		    	{ 2, -1, 3, 8, 5 ,2},
-		    	{ -1, 3, -1, -1, 7 ,-1},
-		    	{ 6, 8, -1, -1, 9 ,3},
-		    	{ -1, 5, 7, 9, -1 ,2},
-		    	{ 2, 4, -1, 3, 2, -1},
+int E[9][9] = { { -1,  4, -1, -1, -1, -1, -1,  8, -1},
+		    	{  4, -1,  8, -1, -1, -1, -1, 11, -1},
+		    	{ -1,  8, -1,  7, -1,  4, -1, -1,  2},
+		    	{ -1, -1,  7, -1,  9, 14, -1, -1, -1},
+		    	{ -1, -1, -1,  9, -1, 10, -1, -1, -1},
+                { -1, -1,  4, 14, 10, -1,  2, -1, -1},
+                { -1, -1, -1, -1, -1,  2, -1,  1,  6},
+                {  8, 11, -1, -1, -1, -1,  1, -1,  7},
+                { -1, -1,  2, -1, -1, -1,  6,  7, -1},
 		    	};;
-int outputE[6][6];
+int outputE[9][9];
 struct node *vertices;
 // struct priority_queue **n;
-struct priority_queue n[7][6];      // Change second parameter to t
+struct priority_queue n[10][6];      // Change second parameter to t, first parameter to n + 1
 
 mutex mtx, mtx_merge;
 
@@ -153,11 +156,12 @@ void compute(int th_id) {
                 }
             }
         }
-
+        // mtx.lock();
         // printf("Priority queue of thread %d\n", th_id);
         // for(int i=0; i<n[N][th_id].weight; i++) {
         //     printf("Edge: %d %d %d\n", n[i][th_id].v1, n[i][th_id].v2, n[i][th_id].weight);
         // }
+        // mtx.unlock();
 
         while(n[N][th_id].weight && working[th_id]) {
             // minimum of the priority queue 'n'
@@ -178,9 +182,10 @@ void compute(int th_id) {
 
             // printf("minnode selected is: %d %d %d\n", minnode.v1, minnode.v2, minnode.weight);
 
-            if(working[th_id] == false) {
+            if(!working[th_id]) {
                 return;
             }
+
             mtx.lock();
             // printMST();
             if(!working[th_id]) {
@@ -197,7 +202,7 @@ void compute(int th_id) {
                 outputE[minnode.v2][minnode.v1] = minnode.weight;
 
                 // printf("Edge added by thread %d: %d %d %d\n", th_id, minnode.v1, minnode.v2, minnode.weight);
-
+                //
                 // printf("priority queue before:\n");
                 // for(int i=0; i<n[N][th_id].weight; i++) {
                 //     printf("Edge: %d %d %d\n", n[i][th_id].v1, n[i][th_id].v2, n[i][th_id].weight);
