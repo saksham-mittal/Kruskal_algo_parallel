@@ -20,9 +20,11 @@ struct priority_queue {
 };
 
 int N = 9;
-int t = 6;
+int t = 2;
 
-bool working[6];    // Change size to t
+int MSTSum = 0;
+
+bool working[2];    // Change size to t
 
 // int **E, **outputE;
 int E[9][9] = { { -1,  4, -1, -1, -1, -1, -1,  8, -1},
@@ -37,10 +39,13 @@ int E[9][9] = { { -1,  4, -1, -1, -1, -1, -1,  8, -1},
 		    	};;
 int outputE[9][9];
 struct node *vertices;
-// struct priority_queue **n;
-struct priority_queue n[10][6];      // Change second parameter to t, first parameter to n + 1
+struct node *uncolored;
+int size_uncolored = 0;
 
-mutex mtx, mtx_merge;
+// struct priority_queue **n;
+struct priority_queue n[10][2];      // Change second parameter to t, first parameter to n + 1
+
+mutex mtx, mtx_merge, mtx_shift;
 
 void printMST();
 // Make t threads and call compute function on all
@@ -49,26 +54,30 @@ thread *th;
 void mergeTree(int index1, int index2) {
     // This function merges two threads (index2 into index1 adn index1 < index2)
 
-    // printf("Priority queue of thread %d\n", index1);
-    // for(int i=0; i<n[N][index1].weight; i++) {
-    //     printf("Edge: %d %d %d\n", n[i][index1].v1, n[i][index1].v2, n[i][index1].weight);
-    // }
-    //
-    // printf("Priority queue of thread %d\n", index2);
-    // for(int i=0; i<n[N][index2].weight; i++) {
-    //     printf("Edge: %d %d %d\n", n[i][index2].v1, n[i][index2].v2, n[i][index2].weight);
-    // }
+    printf("Before merging:\n-------------------------------------------\nPriority queue of thread %d\n", index1);
+    for(int i=0; i<n[N][index1].weight; i++) {
+        printf("Edge: %d %d %d\n", n[i][index1].v1, n[i][index1].v2, n[i][index1].weight);
+    }
+
+    printf("Priority queue of thread %d\n", index2);
+    for(int i=0; i<n[N][index2].weight; i++) {
+        printf("Edge: %d %d %d\n", n[i][index2].v1, n[i][index2].v2, n[i][index2].weight);
+    }
+    printf("-------------------------------------------\n");
 
     // Modify the priority queue of thread index1 to include edges of thread index2
     for(int i=0; i<n[N][index2].weight; i++) {
-        bool found = false;
         if(vertices[n[i][index2].v2].color != index1) {
+            bool found = false;
             // Now check if that v2 is in the priority queue of thread index1
             // If so, update if necessary
             // Else add that edge to priority queue
+
+            printf("Hiii  Edge: %d %d %d, color: %d %d\n", n[i][index2].v1, n[i][index2].v2, n[i][index2].weight, vertices[n[i][index2].v1].color,vertices[n[i][index2].v2].color);
             for(int j=0; j<n[N][index1].weight; j++) {
                 if(n[j][index1].v2 == n[i][index2].v2) {
                     if(n[i][index2].weight < n[j][index1].weight) {
+                        n[j][index1].v1 = n[i][index2].v1;
                         n[j][index1].weight = n[i][index2].weight;
                     }
                     found = true;
@@ -76,17 +85,36 @@ void mergeTree(int index1, int index2) {
                 }
             }
             if(!found) {
-                n[n[N][index1].weight][index1].v1 = n[i][index2].v1;
-                n[n[N][index1].weight][index1].v2 = n[i][index2].v2;
-                n[n[N][index1].weight][index1].weight = n[i][index2].weight;
+                n[n[N][index1].weight][index1] = n[i][index2];
+                n[N][index1].weight++;
             }
         }
     }
 
-    // printf("-------------------------------------------\nPriority queue of thread %d\n", index1);
-    // for(int i=0; i<n[N][index1].weight; i++) {
-    //     printf("Edge: %d %d %d\n", n[i][index1].v1, n[i][index1].v2, n[i][index1].weight);
-    // }
+    printf("-------------------------------------------\nsaksham Priority queue of thread %d\n", index1);
+    for(int i=0; i<n[N][index1].weight; i++) {
+        printf("Edge: %d %d %d\n", n[i][index1].v1, n[i][index1].v2, n[i][index1].weight);
+    }
+    printf("-------------------------------------------\n");
+
+    for(int i=0; i<n[N][index1].weight;) {
+        printf("Edge: %d %d %d, color: %d %d\n", n[i][index1].v1, n[i][index1].v2, n[i][index1].weight, vertices[n[i][index1].v1].color,vertices[n[i][index1].v2].color);
+        if(vertices[n[i][index1].v2].color == index2 && vertices[n[i][index1].v1].color == index1) {
+            // remove this from priority queue
+            for(int j=i; j<n[N][index1].weight - 1; j++) {
+                n[j][index1] = n[j + 1][index1];
+            }
+            i--;
+            n[N][index1].weight--;
+        }
+        i++;
+    }
+
+    printf("-------------------------------------------\nPriority queue of thread %d\n", index1);
+    for(int i=0; i<n[N][index1].weight; i++) {
+        printf("Edge: %d %d %d\n", n[i][index1].v1, n[i][index1].v2, n[i][index1].weight);
+    }
+    printf("-------------------------------------------\n");
 
     // This changes the color of nodes of MST of thread index2 to color of index1
     for(int i=0; i<N; i++) {
@@ -108,28 +136,39 @@ void compute(int th_id) {
     int idx;
     // priority queue for neighbours of the current MST
 
+    printf("-------------------\nsize_uncolored: %d\n-------------------\n", size_uncolored);
+
     while(true && working[th_id]) {
         bool found1 = false, found2 = false, found3 = false, join = false;
         struct node r;
         // Find an uncolored node randomly
         // Traverse vertices array to find the first uncolored node
         found1 = false;
-        for(int i=0; i<N; i++) {
-            if(vertices[i].color == -1) {
-                r = vertices[i];
-                found1 = true;
-                break;
-            }
+
+        printf("size_uncolored: %d\n", size_uncolored);
+
+        if(size_uncolored) {
+            r = uncolored[rand() % size_uncolored];
+            found1 = true;
+        } else {
+            return;
         }
 
         if(!found1) {
             return;
         }
 
-        // printf("Vertice found by thread %d is %d\n", th_id, r.v_no);
+        printf("Vertice found by thread %d is %d\n", th_id, r.v_no);
         vertices[r.v_no].color = th_id;
 
-        // printf("Priority queue decrease key called by thread %d\n", th_id);
+        mtx_shift.lock();
+        for(int i=r.v_no; i<size_uncolored - 1; i++) {
+            uncolored[i] = uncolored[i + 1];
+        }
+        size_uncolored--;
+        mtx_shift.unlock();
+
+        printf("Priority queue decrease key called by thread %d\n", th_id);
 
         for(int i=0; i<N; i++) {
             found2 = false;
@@ -175,12 +214,7 @@ void compute(int th_id) {
                 }
             }
 
-            for(int i=idx + 1; i<n[N][th_id].weight; i++) {
-                n[i - 1][th_id] = n[i][th_id];
-            }
-            n[N][th_id].weight--;
-
-            // printf("minnode selected is: %d %d %d\n", minnode.v1, minnode.v2, minnode.weight);
+            printf("minnode selected is: %d %d %d\n", minnode.v1, minnode.v2, minnode.weight);
 
             if(!working[th_id]) {
                 return;
@@ -191,17 +225,30 @@ void compute(int th_id) {
             if(!working[th_id]) {
                 join = true;
             }
+
+            for(int i=idx + 1; i<n[N][th_id].weight; i++) {
+                n[i - 1][th_id] = n[i][th_id];
+            }
+            n[N][th_id].weight--;
+
             if(vertices[minnode.v2].color == -1 && working[th_id]) {
                 // printf("minnode is uncolored\n");
                 // include the node in the MST
                 vertices[minnode.v2].color = th_id;
+
+                for(int i=minnode.v2; i<size_uncolored - 1; i++) {
+                    uncolored[i] = uncolored[i + 1];
+                }
+                size_uncolored--;
+                printf("size_uncolored inside: %d\n", size_uncolored);
+
                 // printf("Color of minnode now: %d\n", vertices[minnode.v2].color);
 
                 // Add the edge to MST
                 outputE[minnode.v1][minnode.v2] = minnode.weight;
                 outputE[minnode.v2][minnode.v1] = minnode.weight;
 
-                // printf("Edge added by thread %d: %d %d %d\n", th_id, minnode.v1, minnode.v2, minnode.weight);
+                printf("Edge added by thread %d: %d %d %d\n", th_id, minnode.v1, minnode.v2, minnode.weight);
                 //
                 // printf("priority queue before:\n");
                 // for(int i=0; i<n[N][th_id].weight; i++) {
@@ -232,21 +279,33 @@ void compute(int th_id) {
                     }
                 }
 
-                // printf("priority queue after:\n");
-                // for(int i=0; i<n[N][th_id].weight; i++) {
-                //     printf("Edge: %d %d %d\n", n[i][th_id].v1, n[i][th_id].v2, n[i][th_id].weight);
-                // }
+                printf("priority queue after:\n");
+                for(int i=0; i<n[N][th_id].weight; i++) {
+                    printf("Edge: %d %d %d\n", n[i][th_id].v1, n[i][th_id].v2, n[i][th_id].weight);
+                }
 
             } else if(vertices[minnode.v2].color != th_id  && working[th_id]) {
                 int j = vertices[minnode.v2].color;
                 if(th_id < j) {
                     mtx_merge.lock();
+
+                    outputE[minnode.v1][minnode.v2] = minnode.weight;
+                    outputE[minnode.v2][minnode.v1] = minnode.weight;
+
+                    printf("Edge added by thread (inside merge) %d: %d %d %d\n", th_id, minnode.v1, minnode.v2, minnode.weight);
+
                     mergeTree(th_id, j);
                     // Kill j thread
                     working[j] = false;
                     mtx_merge.unlock();
                 } else if(j < th_id) {
                     mtx_merge.lock();
+
+                    outputE[minnode.v1][minnode.v2] = minnode.weight;
+                    outputE[minnode.v2][minnode.v1] = minnode.weight;
+
+                    printf("Edge added by thread (inside merge) %d: %d %d %d\n", th_id, minnode.v1, minnode.v2, minnode.weight);
+
                     mergeTree(j, th_id);
                     // Cannot kill th_id thread
                     join = true;
@@ -271,6 +330,13 @@ void MSTParallel() {
     for(int i=0; i<t; i++) {
         working[i] = true;
     }
+
+    for(int i=0; i<N; i++) {
+        if(vertices[i].color == -1) {
+            uncolored[size_uncolored++] = vertices[i];
+        }
+    }
+
     for(int i=0; i<t; i++) {
         // printf("I am thread %d\n", i);
         th[i] = thread(compute, i);
@@ -291,10 +357,12 @@ void printMST() {
                 cout << "0 ";
             } else {
                 cout /*<< vertices[i].color << " "*/ << outputE[i][j] << " " /*<< vertices[j].color << " | "*/;
+                MSTSum += outputE[i][j];
             }
         }
         cout << endl;
     }
+    cout << "The sum of edges is: " << MSTSum/2 << endl;
 }
 
 int main(int argc, char const *argv[]) {
@@ -303,6 +371,7 @@ int main(int argc, char const *argv[]) {
     // outputE = new int[N][N];
 
     vertices = new struct node[N];
+    uncolored = new struct node[N];
 
     // n = new struct priority_queue[7][t];
     // Nth index is size of the priority queue
